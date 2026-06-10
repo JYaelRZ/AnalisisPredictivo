@@ -421,6 +421,18 @@ export default function PacienteDetallePage() {
     }, 250);
   };
 
+  // Cerrar el menú de reportes PDF al hacer click fuera
+  useEffect(() => {
+    if (!showPrintMenu) return;
+    const handleOutsideClick = () => {
+      setShowPrintMenu(false);
+    };
+    document.addEventListener('click', handleOutsideClick);
+    return () => {
+      document.removeEventListener('click', handleOutsideClick);
+    };
+  }, [showPrintMenu]);
+
   useEffect(() => {
     // Validar sesión
     const email = localStorage.getItem('cdss_doctor_email');
@@ -718,15 +730,13 @@ export default function PacienteDetallePage() {
           >
             <FileSpreadsheet className="w-3.5 h-3.5" />
             Exportar Historial (CSV)
-          </button>
-
-          {/* Menú de Reportes PDF */}
-          <div 
-            className="relative flex-1 md:flex-none print:hidden"
-            onMouseLeave={() => setShowPrintMenu(false)}
-          >
+          </button>          {/* Menú de Reportes PDF */}
+          <div className="relative flex-1 md:flex-none print:hidden">
             <button
-              onClick={() => setShowPrintMenu(!showPrintMenu)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowPrintMenu(!showPrintMenu);
+              }}
               disabled={evaluations.length === 0}
               className="w-full md:w-auto px-4 py-2 border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-xs font-bold text-slate-700 flex items-center justify-center gap-1.5 transition cursor-pointer"
             >
@@ -735,7 +745,10 @@ export default function PacienteDetallePage() {
               <ChevronDown className="w-3 h-3 text-slate-400" />
             </button>
             {showPrintMenu && (
-              <div className="absolute right-0 top-full mt-1.5 w-56 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1.5 transition font-sans">
+              <div 
+                onClick={(e) => e.stopPropagation()}
+                className="absolute right-0 top-full mt-1.5 w-56 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1.5 transition font-sans"
+              >
                 <button
                   onClick={() => {
                     setShowPrintMenu(false);
