@@ -73,7 +73,7 @@ ALTER TABLE public.evaluations ENABLE ROW LEVEL SECURITY;
 
 
 -- 5. POLÍTICAS DE ROW LEVEL SECURITY (RLS)
--- Asegura que un médico solo pueda ver, crear o editar sus propios registros
+-- Asegura que todos los médicos autenticados puedan ver, crear o editar expedientes y evaluaciones
 
 -- POLÍTICAS PARA LA TABLA 'doctors'
 CREATE POLICY "Doctores pueden leer su propio perfil" 
@@ -85,38 +85,39 @@ CREATE POLICY "Doctores pueden actualizar su propio perfil"
     USING (auth.uid() = id);
 
 -- POLÍTICAS PARA LA TABLA 'patients'
-CREATE POLICY "Doctores pueden ver sus propios pacientes" 
+CREATE POLICY "Doctores pueden ver todos los pacientes" 
     ON public.patients FOR SELECT 
-    USING (auth.uid() = doctor_id);
+    USING (auth.role() = 'authenticated');
 
 CREATE POLICY "Doctores pueden registrar pacientes" 
     ON public.patients FOR INSERT 
-    WITH CHECK (auth.uid() = doctor_id);
+    WITH CHECK (auth.role() = 'authenticated');
 
-CREATE POLICY "Doctores pueden actualizar sus pacientes" 
+CREATE POLICY "Doctores pueden actualizar cualquier paciente" 
     ON public.patients FOR UPDATE 
-    USING (auth.uid() = doctor_id);
+    USING (auth.role() = 'authenticated');
 
-CREATE POLICY "Doctores pueden eliminar sus pacientes" 
+CREATE POLICY "Doctores pueden eliminar cualquier paciente" 
     ON public.patients FOR DELETE 
-    USING (auth.uid() = doctor_id);
+    USING (auth.role() = 'authenticated');
 
 -- POLÍTICAS PARA LA TABLA 'evaluations'
-CREATE POLICY "Doctores pueden ver evaluaciones de sus pacientes" 
+CREATE POLICY "Doctores pueden ver todas las evaluaciones" 
     ON public.evaluations FOR SELECT 
-    USING (auth.uid() = doctor_id);
+    USING (auth.role() = 'authenticated');
 
-CREATE POLICY "Doctores pueden crear evaluaciones para sus pacientes" 
+CREATE POLICY "Doctores pueden registrar evaluaciones" 
     ON public.evaluations FOR INSERT 
-    WITH CHECK (auth.uid() = doctor_id);
+    WITH CHECK (auth.role() = 'authenticated');
 
-CREATE POLICY "Doctores pueden actualizar sus evaluaciones" 
+CREATE POLICY "Doctores pueden actualizar cualquier evaluación" 
     ON public.evaluations FOR UPDATE 
-    USING (auth.uid() = doctor_id);
+    USING (auth.role() = 'authenticated');
 
-CREATE POLICY "Doctores pueden eliminar sus evaluaciones" 
+CREATE POLICY "Doctores pueden eliminar cualquier evaluación" 
     ON public.evaluations FOR DELETE 
-    USING (auth.uid() = doctor_id);
+    USING (auth.role() = 'authenticated');
+
 
 
 -- 6. TRIGGERS AUTOMÁTICOS PARA NUEVOS DOCTORES

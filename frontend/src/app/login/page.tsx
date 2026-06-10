@@ -30,6 +30,7 @@ export default function LoginPage() {
           // Guardar una sesión simulada en localStorage
           localStorage.setItem('cdss_simulated_session', 'true');
           localStorage.setItem('cdss_doctor_email', email);
+          localStorage.setItem('cdss_doctor_id', 'doc-1');
           router.push('/dashboard');
           return;
         }
@@ -39,6 +40,7 @@ export default function LoginPage() {
       if (data.user) {
         localStorage.removeItem('cdss_simulated_session');
         localStorage.setItem('cdss_doctor_email', data.user.email || '');
+        localStorage.setItem('cdss_doctor_id', data.user.id);
         router.push('/dashboard');
       }
     } catch (err: any) {

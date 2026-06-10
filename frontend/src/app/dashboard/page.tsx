@@ -95,6 +95,8 @@ export default function DashboardPage() {
 
     // Sincronización desde Supabase si la sesión no es simulada
     const isSimulated = localStorage.getItem('cdss_simulated_session') === 'true';
+    let cleanupRealtime: (() => void) | undefined;
+
     if (!isSimulated) {
       const syncSupabase = async () => {
         try {
@@ -105,7 +107,7 @@ export default function DashboardPage() {
           
           if (patError) throw patError;
           
-          if (dbPatients && dbPatients.length > 0) {
+          if (dbPatients) {
             setPatients(dbPatients);
             localStorage.setItem('cdss_patients', JSON.stringify(dbPatients));
           }
@@ -167,7 +169,36 @@ export default function DashboardPage() {
       };
       
       syncSupabase();
+
+      // Configurar suscripción en tiempo real
+      const channel = supabase
+        .channel('schema-db-changes')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'patients' },
+          () => {
+            console.log("Cambio en tabla 'patients' detectado en tiempo real.");
+            syncSupabase();
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'evaluations' },
+          () => {
+            console.log("Cambio en tabla 'evaluations' detectado en tiempo real.");
+            syncSupabase();
+          }
+        )
+        .subscribe();
+
+      cleanupRealtime = () => {
+        supabase.removeChannel(channel);
+      };
     }
+
+    return () => {
+      if (cleanupRealtime) cleanupRealtime();
+    };
   }, [router]);
 
   const handleLogout = async () => {
@@ -181,10 +212,14 @@ export default function DashboardPage() {
     e.preventDefault();
     if (!newFirstName || !newLastName || !newDob) return;
 
-    const patientId = `pat-${Date.now()}`;
+    const doctorId = localStorage.getItem('cdss_doctor_id') || 'doc-1';
+    const patientId = typeof window !== 'undefined' && window.crypto && window.crypto.randomUUID
+      ? window.crypto.randomUUID()
+      : `pat-${Date.now()}`;
+
     const newPatient: Patient = {
       id: patientId,
-      doctor_id: 'doc-1',
+      doctor_id: doctorId,
       first_name: newFirstName,
       last_name: newLastName,
       curp: newCurp.toUpperCase() || undefined,
@@ -202,7 +237,7 @@ export default function DashboardPage() {
       try {
         const { error } = await supabase.from('patients').insert([{
           id: patientId,
-          doctor_id: 'doc-1',
+          doctor_id: doctorId,
           first_name: newFirstName,
           last_name: newLastName,
           curp: newCurp.toUpperCase() || null,
@@ -211,6 +246,8 @@ export default function DashboardPage() {
 
         if (error) {
           console.error("Error al registrar paciente en Supabase:", error.message);
+        } else {
+          console.log("Paciente registrado exitosamente en Supabase:", patientId);
         }
       } catch (err) {
         console.error("Error de conexión con Supabase:", err);

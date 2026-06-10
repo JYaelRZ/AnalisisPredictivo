@@ -208,11 +208,15 @@ function EvaluacionContent() {
   const handleSaveEvaluation = async () => {
     if (!prediction || !patient) return;
 
-    const evaluationId = `eval-${Date.now()}`;
+    const doctorId = localStorage.getItem('cdss_doctor_id') || patient.doctor_id || 'doc-1';
+    const evaluationId = typeof window !== 'undefined' && window.crypto && window.crypto.randomUUID
+      ? window.crypto.randomUUID()
+      : `eval-${Date.now()}`;
+
     const newEval: Evaluation = {
       id: evaluationId,
       patient_id: patient.id,
-      doctor_id: patient.doctor_id || 'doc-1',
+      doctor_id: doctorId,
       fecha_evaluacion: new Date().toISOString(),
       sexo,
       edad,
@@ -252,7 +256,7 @@ function EvaluacionContent() {
         const { error } = await supabase.from('evaluations').insert([{
           id: evaluationId,
           patient_id: patient.id,
-          doctor_id: patient.doctor_id || 'doc-1',
+          doctor_id: doctorId,
           sexo,
           edad,
           peso,
@@ -277,7 +281,7 @@ function EvaluacionContent() {
         if (error) {
           console.error("Error al persistir en Supabase:", error.message);
         } else {
-          console.log("Evaluación sincronizada exitosamente con Supabase.");
+          console.log("Evaluación sincronizada exitosamente con Supabase:", evaluationId);
         }
       } catch (err) {
         console.error("Fallo de red o de cliente al intentar conectar con Supabase:", err);

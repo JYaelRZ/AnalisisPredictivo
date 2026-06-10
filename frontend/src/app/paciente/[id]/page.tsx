@@ -44,7 +44,7 @@ export default function PacienteDetallePage() {
       return;
     }
 
-    // Cargar paciente de localStorage
+    // Cargar paciente de localStorage como fallback inicial
     const savedPatients = localStorage.getItem('cdss_patients');
     if (savedPatients) {
       const parsed: Patient[] = JSON.parse(savedPatients);
@@ -54,19 +54,108 @@ export default function PacienteDetallePage() {
       }
     }
 
-    // Cargar evaluaciones de este paciente
+    // Cargar evaluaciones de este paciente de localStorage como fallback inicial
     const savedEvaluations = localStorage.getItem('cdss_evaluations');
+    let localEvals: Evaluation[] = [];
     if (savedEvaluations) {
       const parsed: Evaluation[] = JSON.parse(savedEvaluations);
-      const filtered = parsed
+      localEvals = parsed
         .filter(e => e.patient_id === patientId)
-        .sort((a, b) => new Date(a.fecha_evaluacion).getTime() - new Date(b.fecha_evaluacion).getTime()); // Del más antiguo al más nuevo para los gráficos
-      setEvaluations(filtered);
+        .sort((a, b) => new Date(a.fecha_evaluacion).getTime() - new Date(b.fecha_evaluacion).getTime());
+      setEvaluations(localEvals);
       
-      // Expandir la última evaluación por defecto
-      if (filtered.length > 0) {
-        setExpandedEvalId(filtered[filtered.length - 1].id);
+      if (localEvals.length > 0) {
+        setExpandedEvalId(localEvals[localEvals.length - 1].id);
       }
+    }
+
+    // Cargar de Supabase en tiempo real si no es sesión simulada
+    const isSimulated = localStorage.getItem('cdss_simulated_session') === 'true';
+    if (!isSimulated) {
+      const fetchFromSupabase = async () => {
+        try {
+          // 1. Fetch Patient
+          const { data: dbPatient, error: patError } = await supabase
+            .from('patients')
+            .select('*')
+            .eq('id', patientId)
+            .single();
+          
+          if (patError) throw patError;
+          if (dbPatient) {
+            setPatient(dbPatient);
+            // Sincronizar en localStorage
+            const savedPats = localStorage.getItem('cdss_patients');
+            let pats: Patient[] = savedPats ? JSON.parse(savedPats) : [];
+            const index = pats.findIndex(p => p.id === dbPatient.id);
+            if (index > -1) {
+              pats[index] = dbPatient;
+            } else {
+              pats.push(dbPatient);
+            }
+            localStorage.setItem('cdss_patients', JSON.stringify(pats));
+          }
+
+          // 2. Fetch Evaluations
+          const { data: dbEvals, error: evalError } = await supabase
+            .from('evaluations')
+            .select('*')
+            .eq('patient_id', patientId);
+          
+          if (evalError) throw evalError;
+          if (dbEvals) {
+            const mappedEvals: Evaluation[] = dbEvals.map(e => ({
+              id: e.id,
+              patient_id: e.patient_id,
+              doctor_id: e.doctor_id,
+              fecha_evaluacion: e.fecha_evaluacion,
+              sexo: e.sexo,
+              edad: e.edad,
+              peso: e.peso,
+              estatura: e.estatura || 165.0,
+              medida_cintura: e.medida_cintura,
+              masa_corporal: e.masa_corporal,
+              tension_arterial: e.tension_arterial,
+              resultado_glucosa: e.resultado_glucosa || 95.0,
+              valor_colesterol_ldl: e.valor_colesterol_ldl,
+              valor_colesterol_hdl: e.valor_colesterol_hdl || 45.0,
+              valor_colesterol_total: e.valor_colesterol_total,
+              valor_trigliceridos: e.valor_trigliceridos || 150.0,
+              valor_hemoglobina_glucosilada: e.valor_hemoglobina_glucosilada,
+              valor_proteinac_reactiva: e.valor_proteinac_reactiva,
+              valor_insulina: e.valor_insulina,
+              valor_acido_urico: e.valor_acido_urico || 5.0,
+              sueno_horas: e.sueno_horas,
+              actividad_total: e.actividad_total,
+              nivel_riesgo_predicho: e.nivel_riesgo_predicho,
+              probabilidad_predicha: e.probabilidad_predicha,
+              distribucion_probabilidades: e.distribucion_probabilidades,
+              explicacion_shap: e.explicacion_shap,
+              valores_shap: e.valores_shap,
+              resultado_real: e.resultado_real
+            }));
+
+            const sorted = mappedEvals.sort((a, b) => new Date(a.fecha_evaluacion).getTime() - new Date(b.fecha_evaluacion).getTime());
+            setEvaluations(sorted);
+            if (sorted.length > 0) {
+              setExpandedEvalId(sorted[sorted.length - 1].id);
+            }
+
+            // Sincronizar en localStorage completo
+            const savedAllEvaluations = localStorage.getItem('cdss_evaluations');
+            let allEvals: Evaluation[] = savedAllEvaluations ? JSON.parse(savedAllEvaluations) : [];
+            // Filtrar las previas de este paciente
+            allEvals = allEvals.filter(e => e.patient_id !== patientId);
+            // Añadir las nuevas
+            allEvals.push(...sorted);
+            localStorage.setItem('cdss_evaluations', JSON.stringify(allEvals));
+          }
+        } catch (err) {
+          console.error("Error al sincronizar detalle del paciente con Supabase:", err);
+        }
+      };
+
+      fetchFromSupabase();
     }
   }, [patientId, router]);
 
