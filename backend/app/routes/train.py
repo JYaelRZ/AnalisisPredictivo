@@ -29,6 +29,29 @@ async def train_model(payload: Optional[TrainRequest] = None):
         # Extraer evaluaciones opcionales
         evals_data = payload.evaluations if payload else None
         
+        # Intentar cargar todas las evaluaciones de la base de datos Supabase para un reentrenamiento completo
+        if settings.SUPABASE_URL and settings.SUPABASE_KEY:
+            try:
+                from supabase import create_client
+                import uuid
+                supabase_client = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
+                db_res = supabase_client.table('evaluations').select('*').execute()
+                if db_res.data:
+                    print(f"Sincronizadas {len(db_res.data)} evaluaciones de Supabase para reentrenamiento.")
+                    if evals_data is None:
+                        evals_data = []
+                    
+                    existing_ids = {e.get('id') for e in evals_data if e.get('id')}
+                    for db_eval in db_res.data:
+                        # Asegurar compatibilidad de tipos
+                        for k, v in db_eval.items():
+                            if isinstance(v, uuid.UUID):
+                                db_eval[k] = str(v)
+                        if db_eval.get('id') not in existing_ids:
+                            evals_data.append(db_eval)
+            except Exception as se:
+                print(f"Advertencia: Error al cargar evaluaciones de Supabase para entrenamiento: {str(se)}")
+        
         # Entrenar el modelo y obtener las métricas de rendimiento
         metrics = ml_service.train_model(settings.DATASET_PATH, evals_data)
         

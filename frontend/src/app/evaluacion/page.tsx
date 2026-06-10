@@ -113,8 +113,9 @@ function EvaluacionContent() {
     };
 
     try {
-      // Intentar llamar a la API local de FastAPI
-      const res = await fetch('http://localhost:8000/api/v1/predict', {
+      // Intentar llamar a la API de Inferencia (FastAPI)
+      const apiURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const res = await fetch(`${apiURL}/api/v1/predict`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
