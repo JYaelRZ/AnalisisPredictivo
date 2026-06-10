@@ -751,8 +751,8 @@ export default function PacienteDetallePage() {
               >
                 <button
                   onClick={() => {
-                    setShowPrintMenu(false);
                     handlePrintActiveEvaluation();
+                    setShowPrintMenu(false);
                   }}
                   className="w-full text-left px-4 py-2 hover:bg-slate-50 text-xs font-semibold text-slate-700 flex items-center gap-2 cursor-pointer"
                 >
@@ -760,8 +760,8 @@ export default function PacienteDetallePage() {
                 </button>
                 <button
                   onClick={() => {
-                    setShowPrintMenu(false);
                     handlePrintHistory();
+                    setShowPrintMenu(false);
                   }}
                   className="w-full text-left px-4 py-2 hover:bg-slate-50 text-xs font-semibold text-slate-700 flex items-center gap-2 cursor-pointer"
                 >
