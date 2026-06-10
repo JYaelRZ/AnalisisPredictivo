@@ -70,7 +70,7 @@ export default function PacienteDetallePage() {
     }
   }, [patientId, router]);
 
-  // Actualizar el Gold Standard (resultado_real) de una evaluación
+  // Actualizar el Gold Standard (resultado_real) de una evaluación e iniciar reentrenamiento automático
   const handleUpdateOutcome = async (evalId: string, value: 'Bajo' | 'Medio' | 'Alto' | null) => {
     // 1. Actualizar estado y localStorage
     const updatedEvals = evaluations.map(ev => {
@@ -82,9 +82,10 @@ export default function PacienteDetallePage() {
     
     // Guardar en el set completo
     const savedEvaluations = localStorage.getItem('cdss_evaluations');
+    let updatedGlobal: Evaluation[] = [];
     if (savedEvaluations) {
       const parsed: Evaluation[] = JSON.parse(savedEvaluations);
-      const updatedGlobal = parsed.map(ev => {
+      updatedGlobal = parsed.map(ev => {
         if (ev.id === evalId) {
           return { ...ev, resultado_real: value };
         }
@@ -113,6 +114,33 @@ export default function PacienteDetallePage() {
       } catch (err) {
         console.error("Fallo de comunicación con Supabase:", err);
       }
+    }
+
+    // 3. Disparar Reentrenamiento Automático en Tiempo Real
+    try {
+      const apiURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const payloadEvals = updatedGlobal.length > 0 ? updatedGlobal : updatedEvals;
+      
+      console.log("Disparando reentrenamiento automático en el backend...");
+      fetch(`${apiURL}/api/v1/train`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ evaluations: payloadEvals })
+      })
+      .then(res => {
+        if (!res.ok) throw new Error("Servidor de entrenamiento retornó error.");
+        return res.json();
+      })
+      .then(data => {
+        console.log("Reentrenamiento en tiempo real completado exitosamente:", data);
+      })
+      .catch(err => {
+        console.warn("No se pudo completar el reentrenamiento automático. (Asegúrate de que el backend esté accesible):", err.message);
+      });
+    } catch (err: any) {
+      console.error("Error al disparar reentrenamiento:", err.message);
     }
   };
 
