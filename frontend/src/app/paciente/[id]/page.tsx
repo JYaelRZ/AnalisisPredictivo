@@ -36,390 +36,372 @@ export default function PacienteDetallePage() {
   const [expandedEvalId, setExpandedEvalId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'riesgo' | 'biomarcadores'>('riesgo');
   const [showPrintMenu, setShowPrintMenu] = useState(false);
-  const handlePrintActiveEvaluation = () => {
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const loadHtml2Pdf = (): Promise<any> => {
+    return new Promise((resolve, reject) => {
+      if (typeof window === 'undefined') return reject(new Error("Server-side rendering"));
+      if ((window as any).html2pdf) {
+        resolve((window as any).html2pdf);
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+      script.onload = () => resolve((window as any).html2pdf);
+      script.onerror = () => reject(new Error("No se pudo cargar la librería de generación de PDF."));
+      document.head.appendChild(script);
+    });
+  };
+
+  const handlePrintActiveEvaluation = async () => {
     if (!patient) return;
     const activeEval = evaluations.find(e => e.id === expandedEvalId) || evaluations[evaluations.length - 1];
     if (!activeEval) return;
 
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      alert("Por favor, permite las ventanas emergentes (pop-ups) para generar el reporte PDF.");
-      return;
-    }
+    setIsDownloading(true);
+    try {
+      const html2pdf = await loadHtml2Pdf();
 
-    const birthYear = new Date(patient.fecha_nacimiento).getFullYear();
-    const currentYear = new Date().getFullYear();
-    const edad = currentYear - birthYear;
-    const evalDate = new Date(activeEval.fecha_evaluacion).toLocaleDateString('es-MX', { 
-      day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' 
-    });
+      const birthYear = new Date(patient.fecha_nacimiento).getFullYear();
+      const currentYear = new Date().getFullYear();
+      const edad = currentYear - birthYear;
+      const evalDate = new Date(activeEval.fecha_evaluacion).toLocaleDateString('es-MX', { 
+        day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' 
+      });
 
-    const ldlValue = activeEval.valor_colesterol_ldl;
-    const hba1cValue = activeEval.valor_hemoglobina_glucosilada;
-    const pasValue = activeEval.tension_arterial;
-    const imcValue = activeEval.masa_corporal;
-    const pcrValue = activeEval.valor_proteinac_reactiva;
-    const glucoseValue = activeEval.resultado_glucosa;
-    const colTotalValue = activeEval.valor_colesterol_total;
-    const waistValue = activeEval.medida_cintura;
+      const ldlValue = activeEval.valor_colesterol_ldl;
+      const hba1cValue = activeEval.valor_hemoglobina_glucosilada;
+      const pasValue = activeEval.tension_arterial;
+      const imcValue = activeEval.masa_corporal;
+      const pcrValue = activeEval.valor_proteinac_reactiva;
+      const glucoseValue = activeEval.resultado_glucosa;
+      const colTotalValue = activeEval.valor_colesterol_total;
+      const waistValue = activeEval.medida_cintura;
 
-    const riskColor = activeEval.nivel_riesgo_predicho === 'Alto' ? '#ef4444' : activeEval.nivel_riesgo_predicho === 'Medio' ? '#eab308' : '#10b981';
-    const riskBadge = activeEval.nivel_riesgo_predicho === 'Alto' 
-      ? '🔴 RIESGO CARDIOVASCULAR ALTO' 
-      : activeEval.nivel_riesgo_predicho === 'Medio' 
-        ? '🟡 RIESGO CARDIOVASCULAR MEDIO' 
-        : '🟢 RIESGO CARDIOVASCULAR BAJO';
+      const riskColor = activeEval.nivel_riesgo_predicho === 'Alto' ? '#ef4444' : activeEval.nivel_riesgo_predicho === 'Medio' ? '#eab308' : '#10b981';
+      const riskBadge = activeEval.nivel_riesgo_predicho === 'Alto' 
+        ? '🔴 RIESGO CARDIOVASCULAR ALTO' 
+        : activeEval.nivel_riesgo_predicho === 'Medio' 
+          ? '🟡 RIESGO CARDIOVASCULAR MEDIO' 
+          : '🟢 RIESGO CARDIOVASCULAR BAJO';
 
-    const getStatusText = (val: number, normalMax: number, normalMin = 0, type: string) => {
-      if (type === 'hba1c') {
-        return val >= 5.7 ? '<span style="color:#ef4444; font-weight:bold;">⚠️ Alterado (Pre/Diabetes)</span>' : '<span style="color:#10b981; font-weight:bold;">✓ Normal</span>';
-      }
-      if (type === 'ldl') {
-        return val >= 100 ? '<span style="color:#ef4444; font-weight:bold;">⚠️ Elevado</span>' : '<span style="color:#10b981; font-weight:bold;">✓ Normal</span>';
-      }
-      if (type === 'pas') {
-        return val >= 130 ? '<span style="color:#ef4444; font-weight:bold;">⚠️ Hipertensión</span>' : val >= 120 ? '<span style="color:#eab308; font-weight:bold;">⚠️ Elevada</span>' : '<span style="color:#10b981; font-weight:bold;">✓ Normal</span>';
-      }
-      if (type === 'imc') {
-        return val >= 30 ? '<span style="color:#ef4444; font-weight:bold;">⚠️ Obesidad</span>' : val >= 25 ? '<span style="color:#eab308; font-weight:bold;">⚠️ Sobrepeso</span>' : '<span style="color:#10b981; font-weight:bold;">✓ Normal</span>';
-      }
-      if (type === 'pcr') {
-        return val >= 3.0 ? '<span style="color:#ef4444; font-weight:bold;">⚠️ Alto Riesgo Inflamatorio</span>' : val >= 1.0 ? '<span style="color:#eab308; font-weight:bold;">⚠️ Riesgo Moderado</span>' : '<span style="color:#10b981; font-weight:bold;">✓ Normal</span>';
-      }
-      if (type === 'glucosa') {
-        return val >= 126 ? '<span style="color:#ef4444; font-weight:bold;">⚠️ Hiperglucemia Crítica</span>' : val >= 100 ? '<span style="color:#eab308; font-weight:bold;">⚠️ Prediabetes</span>' : '<span style="color:#10b981; font-weight:bold;">✓ Normal</span>';
-      }
-      if (type === 'colesterol') {
-        return val >= 200 ? '<span style="color:#ef4444; font-weight:bold;">⚠️ Hipercolesterolemia</span>' : '<span style="color:#10b981; font-weight:bold;">✓ Normal</span>';
-      }
-      if (type === 'cintura') {
-        const isAbnormal = (activeEval.sexo === 'Hombre' && val >= 90) || (activeEval.sexo === 'Mujer' && val >= 80);
-        return isAbnormal ? '<span style="color:#ef4444; font-weight:bold;">⚠️ Riesgo Abdominal</span>' : '<span style="color:#10b981; font-weight:bold;">✓ Normal</span>';
-      }
-      return '';
-    };
-
-    const docEmail = localStorage.getItem('cdss_doctor_email') || 'Médico Tratante';
-
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Reporte de Evaluación Clínica - ${patient.first_name} ${patient.last_name}</title>
-        <meta charset="utf-8" />
-        <style>
-          body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #334155; margin: 0; padding: 40px; font-size: 12px; line-height: 1.5; }
-          .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0f172a; padding-bottom: 20px; margin-bottom: 30px; }
-          .header h1 { margin: 0; font-size: 24px; font-weight: 800; color: #0f172a; tracking-wider; }
-          .header p { margin: 4px 0 0 0; font-size: 10px; color: #64748b; font-weight: 600; text-transform: uppercase; }
-          .meta-info { text-align: right; font-size: 10px; color: #64748b; }
-          .meta-info p { margin: 2px 0; }
-          .section-title { font-size: 11px; font-weight: 700; color: #0f172a; text-transform: uppercase; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; margin: 25px 0 15px 0; letter-spacing: 0.5px; }
-          .patient-card { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 25px; }
-          .patient-card div { display: flex; flex-direction: column; }
-          .patient-card span.label { font-size: 9px; font-weight: 700; color: #94a3b8; text-transform: uppercase; margin-bottom: 4px; }
-          .patient-card span.val { font-size: 13px; font-weight: bold; color: #1e293b; }
-          .result-card { display: flex; justify-content: space-between; align-items: center; background-color: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 25px; }
-          .risk-level { font-size: 15px; font-weight: 800; color: ${riskColor}; }
-          .certainty-score { font-size: 20px; font-weight: 800; color: #0f172a; text-align: right; }
-          .certainty-sub { font-size: 10px; color: #64748b; font-weight: normal; }
-          table { width: 100%; border-collapse: collapse; margin-top: 10px; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
-          th { background-color: #f8fafc; font-size: 9px; font-weight: 700; color: #475569; text-transform: uppercase; padding: 10px 12px; border-bottom: 1px solid #e2e8f0; text-align: left; }
-          td { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; font-size: 11px; }
-          .shap-text { font-family: monospace; font-size: 11px; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; white-space: pre-wrap; line-height: 1.6; color: #334155; }
-          .signature-section { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 50px; }
-          .signature-box { border-top: 1px solid #94a3b8; margin-top: 60px; padding-top: 10px; text-align: center; }
-          .footer-note { text-align: center; font-size: 9px; color: #94a3b8; margin-top: 50px; border-top: 1px solid #f1f5f9; padding-top: 15px; }
-          @media print {
-            body { padding: 0; }
-          }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <div>
-            <h1>CardioPredict CDSS</h1>
-            <p>Sistema de Soporte de Decisiones Clínicas - Riesgo Cardiovascular</p>
-          </div>
-          <div class="meta-info">
-            <p><strong>Reporte de Inferencia Clínica</strong></p>
-            <p>Fecha de Impresión: ${new Date().toLocaleDateString('es-MX')}</p>
-          </div>
-        </div>
-
-        <div class="patient-card">
-          <div>
-            <span class="label">Paciente</span>
-            <span class="val">${patient.first_name} ${patient.last_name}</span>
-          </div>
-          <div>
-            <span class="label">CURP</span>
-            <span class="val" style="font-family: monospace;">${patient.curp || 'No Registrado'}</span>
-          </div>
-          <div>
-            <span class="label">Fecha de Nacimiento</span>
-            <span class="val">${patient.fecha_nacimiento} (${edad} años)</span>
-          </div>
-          <div>
-            <span class="label">Fecha de Evaluación</span>
-            <span class="val">${evalDate}</span>
-          </div>
-        </div>
-
-        <div class="result-card">
-          <div>
-            <span class="label" style="display:block; margin-bottom: 4px;">Riesgo Predictivo Estimado</span>
-            <span class="risk-level">${riskBadge}</span>
-          </div>
-          <div style="text-align: right;">
-            <span class="label" style="display:block; margin-bottom: 4px;">Certeza del CDSS</span>
-            <span class="certainty-score">${activeEval.probabilidad_predicha}% <span class="certainty-sub">(Confianza XGBoost)</span></span>
-          </div>
-        </div>
-
-        <div class="section-title">Biomarcadores y Parámetros Clínicos</div>
-        <table>
-          <thead>
-            <tr>
-              <th>Biomarcador / Parámetro</th>
-              <th style="text-align: center;">Valor</th>
-              <th style="text-align: center;">Rango de Referencia</th>
-              <th style="text-align: center;">Estado Clínico</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td style="font-weight: bold;">Hemoglobina Glucosilada (HbA1c)</td>
-              <td style="text-align: center; font-weight: bold;">${hba1cValue}%</td>
-              <td style="text-align: center; color: #64748b;">&lt; 5.7% (Normal)</td>
-              <td style="text-align: center;">${getStatusText(hba1cValue, 5.6, 0, 'hba1c')}</td>
-            </tr>
-            <tr>
-              <td style="font-weight: bold;">Colesterol LDL</td>
-              <td style="text-align: center; font-weight: bold;">${ldlValue} mg/dL</td>
-              <td style="text-align: center; color: #64748b;">&lt; 100 mg/dL (Normal)</td>
-              <td style="text-align: center;">${getStatusText(ldlValue, 99, 0, 'ldl')}</td>
-            </tr>
-            <tr>
-              <td style="font-weight: bold;">Presión Arterial Sistólica</td>
-              <td style="text-align: center; font-weight: bold;">${pasValue} mmHg</td>
-              <td style="text-align: center; color: #64748b;">&lt; 120 mmHg (Normal)</td>
-              <td style="text-align: center;">${getStatusText(pasValue, 119, 0, 'pas')}</td>
-            </tr>
-            <tr>
-              <td style="font-weight: bold;">Índice de Masa Corporal (IMC)</td>
-              <td style="text-align: center; font-weight: bold;">${imcValue} kg/m²</td>
-              <td style="text-align: center; color: #64748b;">18.5 - 24.9 (Normal)</td>
-              <td style="text-align: center;">${getStatusText(imcValue, 24.9, 18.5, 'imc')}</td>
-            </tr>
-            <tr>
-              <td style="font-weight: bold;">Proteína C Reactiva (PCR-hs)</td>
-              <td style="text-align: center; font-weight: bold;">${pcrValue} mg/L</td>
-              <td style="text-align: center; color: #64748b;">&lt; 1.0 mg/L (Bajo Riesgo)</td>
-              <td style="text-align: center;">${getStatusText(pcrValue, 0.99, 0, 'pcr')}</td>
-            </tr>
-            <tr>
-              <td style="font-weight: bold;">Glucosa en Ayunas</td>
-              <td style="text-align: center; font-weight: bold;">${glucoseValue} mg/dL</td>
-              <td style="text-align: center; color: #64748b;">70 - 99 mg/dL (Normal)</td>
-              <td style="text-align: center;">${getStatusText(glucoseValue, 99, 70, 'glucosa')}</td>
-            </tr>
-            <tr>
-              <td style="font-weight: bold;">Colesterol Total</td>
-              <td style="text-align: center; font-weight: bold;">${colTotalValue} mg/dL</td>
-              <td style="text-align: center; color: #64748b;">&lt; 200 mg/dL (Normal)</td>
-              <td style="text-align: center;">${getStatusText(colTotalValue, 199, 0, 'colesterol')}</td>
-            </tr>
-            <tr>
-              <td style="font-weight: bold;">Circunferencia de Cintura</td>
-              <td style="text-align: center; font-weight: bold;">${waistValue} cm</td>
-              <td style="text-align: center; color: #64748b;">H &lt; 90 cm | M &lt; 80 cm</td>
-              <td style="text-align: center;">${getStatusText(waistValue, 0, 0, 'cintura')}</td>
-            </tr>
-          </tbody>
-        </table>
-
-        <div class="section-title">Explicabilidad Clínica y Aporte SHAP</div>
-        <div class="shap-text">${activeEval.explicacion_shap}</div>
-
-        <div class="signature-section">
-          <div>
-            <div style="font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; margin-bottom: 10px;">Notas Clínicas e Indicaciones</div>
-            <div style="height: 15px; border-bottom: 1px dashed #cbd5e1;"></div>
-            <div style="height: 15px; border-bottom: 1px dashed #cbd5e1;"></div>
-            <div style="height: 15px; border-bottom: 1px dashed #cbd5e1;"></div>
-          </div>
-          <div class="signature-box">
-            <p style="font-size: 11px; font-weight: bold; margin: 0;">Dr(a). ${docEmail}</p>
-            <p style="font-size: 9px; color: #64748b; margin: 4px 0 0 0;">Cédula Profesional / Firma Autorizada</p>
-          </div>
-        </div>
-
-        <div class="footer-note">
-          Este reporte fue emitido por el soporte inteligente de CardioPredict CDSS (XGBoost). La predicción no reemplaza el juicio clínico final del especialista de la salud.
-        </div>
-      </body>
-      </html>
-    `;
-
-    printWindow.document.write(htmlContent);
-    printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => {
-      printWindow.onafterprint = () => {
-        try {
-          printWindow.close();
-        } catch (e) {
-          console.error("Error al cerrar la ventana de impresión:", e);
+      const getStatusText = (val: number, normalMax: number, normalMin = 0, type: string) => {
+        if (type === 'hba1c') {
+          return val >= 5.7 ? '<span style="color:#ef4444; font-weight:bold;">⚠️ Alterado</span>' : '<span style="color:#10b981; font-weight:bold;">✓ Normal</span>';
         }
+        if (type === 'ldl') {
+          return val >= 100 ? '<span style="color:#ef4444; font-weight:bold;">⚠️ Elevado</span>' : '<span style="color:#10b981; font-weight:bold;">✓ Normal</span>';
+        }
+        if (type === 'pas') {
+          return val >= 130 ? '<span style="color:#ef4444; font-weight:bold;">⚠️ Hipertensión</span>' : val >= 120 ? '<span style="color:#eab308; font-weight:bold;">⚠️ Elevada</span>' : '<span style="color:#10b981; font-weight:bold;">✓ Normal</span>';
+        }
+        if (type === 'imc') {
+          return val >= 30 ? '<span style="color:#ef4444; font-weight:bold;">⚠️ Obesidad</span>' : val >= 25 ? '<span style="color:#eab308; font-weight:bold;">⚠️ Sobrepeso</span>' : '<span style="color:#10b981; font-weight:bold;">✓ Normal</span>';
+        }
+        if (type === 'pcr') {
+          return val >= 3.0 ? '<span style="color:#ef4444; font-weight:bold;">⚠️ Alto Riesgo</span>' : val >= 1.0 ? '<span style="color:#eab308; font-weight:bold;">⚠️ Riesgo Mod.</span>' : '<span style="color:#10b981; font-weight:bold;">✓ Normal</span>';
+        }
+        if (type === 'glucosa') {
+          return val >= 126 ? '<span style="color:#ef4444; font-weight:bold;">⚠️ Crítica</span>' : val >= 100 ? '<span style="color:#eab308; font-weight:bold;">⚠️ Prediabetes</span>' : '<span style="color:#10b981; font-weight:bold;">✓ Normal</span>';
+        }
+        if (type === 'colesterol') {
+          return val >= 200 ? '<span style="color:#ef4444; font-weight:bold;">⚠️ Elevado</span>' : '<span style="color:#10b981; font-weight:bold;">✓ Normal</span>';
+        }
+        if (type === 'cintura') {
+          const isAbnormal = (activeEval.sexo === 'Hombre' && val >= 90) || (activeEval.sexo === 'Mujer' && val >= 80);
+          return isAbnormal ? '<span style="color:#ef4444; font-weight:bold;">⚠️ Riesgo</span>' : '<span style="color:#10b981; font-weight:bold;">✓ Normal</span>';
+        }
+        return '';
       };
-      printWindow.print();
-    }, 250);
+
+      const docEmail = localStorage.getItem('cdss_doctor_email') || 'Médico Tratante';
+
+      const container = document.createElement('div');
+      container.innerHTML = `
+        <div style="font-family: Arial, sans-serif; color: #334155; padding: 25px; font-size: 11px; line-height: 1.45;">
+          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0f172a; padding-bottom: 15px; margin-bottom: 20px;">
+            <div>
+              <h1 style="margin: 0; font-size: 20px; font-weight: 800; color: #0f172a; text-transform: uppercase;">CardioPredict CDSS</h1>
+              <p style="margin: 2px 0 0 0; font-size: 8px; color: #64748b; font-weight: 600; text-transform: uppercase;">Sistema de Soporte de Decisiones Clínicas - Riesgo Cardiovascular</p>
+            </div>
+            <div style="text-align: right; font-size: 8px; color: #64748b;">
+              <p><strong>Reporte de Inferencia Clínica</strong></p>
+              <p>Fecha de Impresión: ${new Date().toLocaleDateString('es-MX')}</p>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px 20px; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; margin-bottom: 20px;">
+            <div style="display: flex; flex-direction: column;">
+              <span style="font-size: 8px; font-weight: 700; color: #94a3b8; text-transform: uppercase; margin-bottom: 2px;">Paciente</span>
+              <span style="font-size: 11px; font-weight: bold; color: #1e293b;">${patient.first_name} ${patient.last_name}</span>
+            </div>
+            <div style="display: flex; flex-direction: column;">
+              <span style="font-size: 8px; font-weight: 700; color: #94a3b8; text-transform: uppercase; margin-bottom: 2px;">CURP</span>
+              <span style="font-size: 11px; font-weight: bold; color: #1e293b; font-family: monospace;">${patient.curp || 'No Registrado'}</span>
+            </div>
+            <div style="display: flex; flex-direction: column;">
+              <span style="font-size: 8px; font-weight: 700; color: #94a3b8; text-transform: uppercase; margin-bottom: 2px;">Fecha de Nacimiento</span>
+              <span style="font-size: 11px; font-weight: bold; color: #1e293b;">${patient.fecha_nacimiento} (${edad} años)</span>
+            </div>
+            <div style="display: flex; flex-direction: column;">
+              <span style="font-size: 8px; font-weight: 700; color: #94a3b8; text-transform: uppercase; margin-bottom: 2px;">Fecha de Evaluación</span>
+              <span style="font-size: 11px; font-weight: bold; color: #1e293b;">${evalDate}</span>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; background-color: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; margin-bottom: 20px; align-items: center;">
+            <div>
+              <span style="font-size: 8px; font-weight: 700; color: #94a3b8; text-transform: uppercase; display: block; margin-bottom: 2px;">Riesgo Predictivo Estimado</span>
+              <span style="font-size: 12px; font-weight: 800; color: ${riskColor};">${riskBadge}</span>
+            </div>
+            <div style="text-align: right;">
+              <span style="font-size: 8px; font-weight: 700; color: #94a3b8; text-transform: uppercase; display: block; margin-bottom: 2px;">Certeza del CDSS</span>
+              <span style="font-size: 16px; font-weight: 800; color: #0f172a;">${activeEval.probabilidad_predicha}% <span style="font-size: 8px; color: #64748b; font-weight: normal;">(Confianza XGBoost)</span></span>
+            </div>
+          </div>
+
+          <div style="font-size: 10px; font-weight: 700; color: #0f172a; text-transform: uppercase; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; margin: 20px 0 10px 0;">Biomarcadores y Parámetros Clínicos</div>
+          <table style="width: 100%; border-collapse: collapse; margin-top: 10px; border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden;">
+            <thead>
+              <tr style="background-color: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+                <th style="font-size: 8px; font-weight: 700; color: #475569; text-transform: uppercase; padding: 6px 8px; text-align: left;">Biomarcador / Parámetro</th>
+                <th style="font-size: 8px; font-weight: 700; color: #475569; text-transform: uppercase; padding: 6px 8px; text-align: center;">Valor</th>
+                <th style="font-size: 8px; font-weight: 700; color: #475569; text-transform: uppercase; padding: 6px 8px; text-align: center;">Rango de Referencia</th>
+                <th style="font-size: 8px; font-weight: 700; color: #475569; text-transform: uppercase; padding: 6px 8px; text-align: center;">Estado Clínico</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom: 1px solid #f1f5f9;">
+                <td style="padding: 6px 8px; font-size: 9px; font-weight: bold;">Hemoglobina Glucosilada (HbA1c)</td>
+                <td style="padding: 6px 8px; font-size: 9px; text-align: center; font-weight: bold;">${hba1cValue}%</td>
+                <td style="padding: 6px 8px; font-size: 9px; text-align: center; color: #64748b;">&lt; 5.7% (Normal)</td>
+                <td style="padding: 6px 8px; font-size: 9px; text-align: center;">${getStatusText(hba1cValue, 5.6, 0, 'hba1c')}</td>
+              </tr>
+              <tr style="border-bottom: 1px solid #f1f5f9;">
+                <td style="padding: 6px 8px; font-size: 9px; font-weight: bold;">Colesterol LDL</td>
+                <td style="padding: 6px 8px; font-size: 9px; text-align: center; font-weight: bold;">${ldlValue} mg/dL</td>
+                <td style="padding: 6px 8px; font-size: 9px; text-align: center; color: #64748b;">&lt; 100 mg/dL (Normal)</td>
+                <td style="padding: 6px 8px; font-size: 9px; text-align: center;">${getStatusText(ldlValue, 99, 0, 'ldl')}</td>
+              </tr>
+              <tr style="border-bottom: 1px solid #f1f5f9;">
+                <td style="padding: 6px 8px; font-size: 9px; font-weight: bold;">Presión Arterial Sistólica</td>
+                <td style="padding: 6px 8px; font-size: 9px; text-align: center; font-weight: bold;">${pasValue} mmHg</td>
+                <td style="padding: 6px 8px; font-size: 9px; text-align: center; color: #64748b;">&lt; 120 mmHg (Normal)</td>
+                <td style="padding: 6px 8px; font-size: 9px; text-align: center;">${getStatusText(pasValue, 119, 0, 'pas')}</td>
+              </tr>
+              <tr style="border-bottom: 1px solid #f1f5f9;">
+                <td style="padding: 6px 8px; font-size: 9px; font-weight: bold;">Índice de Masa Corporal (IMC)</td>
+                <td style="padding: 6px 8px; font-size: 9px; text-align: center; font-weight: bold;">${imcValue} kg/m²</td>
+                <td style="padding: 6px 8px; font-size: 9px; text-align: center; color: #64748b;">18.5 - 24.9 (Normal)</td>
+                <td style="padding: 6px 8px; font-size: 9px; text-align: center;">${getStatusText(imcValue, 24.9, 18.5, 'imc')}</td>
+              </tr>
+              <tr style="border-bottom: 1px solid #f1f5f9;">
+                <td style="padding: 6px 8px; font-size: 9px; font-weight: bold;">Proteína C Reactiva (PCR-hs)</td>
+                <td style="padding: 6px 8px; font-size: 9px; text-align: center; font-weight: bold;">${pcrValue} mg/L</td>
+                <td style="padding: 6px 8px; font-size: 9px; text-align: center; color: #64748b;">&lt; 1.0 mg/L (Bajo Riesgo)</td>
+                <td style="padding: 6px 8px; font-size: 9px; text-align: center;">${getStatusText(pcrValue, 0.99, 0, 'pcr')}</td>
+              </tr>
+              <tr style="border-bottom: 1px solid #f1f5f9;">
+                <td style="padding: 6px 8px; font-size: 9px; font-weight: bold;">Glucosa en Ayunas</td>
+                <td style="padding: 6px 8px; font-size: 9px; text-align: center; font-weight: bold;">${glucoseValue} mg/dL</td>
+                <td style="padding: 6px 8px; font-size: 9px; text-align: center; color: #64748b;">70 - 99 mg/dL (Normal)</td>
+                <td style="padding: 6px 8px; font-size: 9px; text-align: center;">${getStatusText(glucoseValue, 99, 70, 'glucosa')}</td>
+              </tr>
+              <tr style="border-bottom: 1px solid #f1f5f9;">
+                <td style="padding: 6px 8px; font-size: 9px; font-weight: bold;">Colesterol Total</td>
+                <td style="padding: 6px 8px; font-size: 9px; text-align: center; font-weight: bold;">${colTotalValue} mg/dL</td>
+                <td style="padding: 6px 8px; font-size: 9px; text-align: center; color: #64748b;">&lt; 200 mg/dL (Normal)</td>
+                <td style="padding: 6px 8px; font-size: 9px; text-align: center;">${getStatusText(colTotalValue, 199, 0, 'colesterol')}</td>
+              </tr>
+              <tr style="border-bottom: 1px solid #f1f5f9;">
+                <td style="padding: 6px 8px; font-size: 9px; font-weight: bold;">Circunferencia de Cintura</td>
+                <td style="padding: 6px 8px; font-size: 9px; text-align: center; font-weight: bold;">${waistValue} cm</td>
+                <td style="padding: 6px 8px; font-size: 9px; text-align: center; color: #64748b;">H &lt; 90 cm | M &lt; 80 cm</td>
+                <td style="padding: 6px 8px; font-size: 9px; text-align: center;">${getStatusText(waistValue, 0, 0, 'cintura')}</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div style="font-size: 10px; font-weight: 700; color: #0f172a; text-transform: uppercase; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; margin: 20px 0 10px 0;">Explicabilidad Clínica y Aporte SHAP</div>
+          <div style="font-family: monospace; font-size: 9px; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px; white-space: pre-wrap; line-height: 1.4; color: #334155;">${activeEval.explicacion_shap}</div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 30px;">
+            <div>
+              <div style="font-size: 8px; font-weight: 700; color: #94a3b8; text-transform: uppercase; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; margin-bottom: 10px;">Notas Clínicas e Indicaciones</div>
+              <div style="height: 12px; border-bottom: 1px dashed #cbd5e1;"></div>
+              <div style="height: 12px; border-bottom: 1px dashed #cbd5e1;"></div>
+            </div>
+            <div style="border-top: 1px solid #94a3b8; margin-top: 40px; padding-top: 6px; text-align: center;">
+              <p style="font-size: 10px; font-weight: bold; margin: 0;">Dr(a). ${docEmail}</p>
+              <p style="font-size: 8px; color: #64748b; margin: 4px 0 0 0;">Cédula Profesional / Firma Autorizada</p>
+            </div>
+          </div>
+
+          <div style="text-align: center; font-size: 8px; color: #94a3b8; margin-top: 30px; border-top: 1px solid #f1f5f9; padding-top: 8px;">
+            Este reporte fue emitido por el soporte inteligente de CardioPredict CDSS (XGBoost). La predicción no reemplaza el juicio clínico final del especialista de la salud.
+          </div>
+        </div>
+      `;
+
+      const opt = {
+        margin: [10, 10, 10, 10],
+        filename: `Reporte_Clinico_${patient.first_name}_${patient.last_name}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, logging: false },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+
+      const pdfBlob = await html2pdf().from(container).set(opt).outputPdf('blob');
+      const url = URL.createObjectURL(pdfBlob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `Reporte_Clinico_${patient.first_name}_${patient.last_name}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      console.error("Fallo al descargar PDF:", err.message);
+      alert("Error al generar el PDF. Por favor reintenta.");
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
-  const handlePrintHistory = () => {
+  const handlePrintHistory = async () => {
     if (!patient || evaluations.length === 0) return;
 
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      alert("Por favor, permite las ventanas emergentes (pop-ups) para generar el reporte PDF.");
-      return;
-    }
+    setIsDownloading(true);
+    try {
+      const html2pdf = await loadHtml2Pdf();
 
-    const birthYear = new Date(patient.fecha_nacimiento).getFullYear();
-    const currentYear = new Date().getFullYear();
-    const edad = currentYear - birthYear;
-    const docEmail = localStorage.getItem('cdss_doctor_email') || 'Médico Tratante';
+      const birthYear = new Date(patient.fecha_nacimiento).getFullYear();
+      const currentYear = new Date().getFullYear();
+      const edad = currentYear - birthYear;
+      const docEmail = localStorage.getItem('cdss_doctor_email') || 'Médico Tratante';
 
-    let tableRows = '';
-    evaluations.forEach(ev => {
-      const dateStr = new Date(ev.fecha_evaluacion).toLocaleDateString('es-MX', { 
-        day: '2-digit', month: 'short', year: 'numeric' 
+      let tableRows = '';
+      evaluations.forEach(ev => {
+        const dateStr = new Date(ev.fecha_evaluacion).toLocaleDateString('es-MX', { 
+          day: '2-digit', month: 'short', year: 'numeric' 
+        });
+        const riskClass = ev.nivel_riesgo_predicho === 'Alto' ? '#ef4444' : ev.nivel_riesgo_predicho === 'Medio' ? '#eab308' : '#10b981';
+        tableRows += `
+          <tr style="border-bottom: 1px solid #f1f5f9;">
+            <td style="padding: 6px 8px; font-size: 9px; font-weight: bold;">${dateStr}</td>
+            <td style="padding: 6px 8px; font-size: 9px; text-align: center; font-weight: bold; color: ${riskClass};">${ev.nivel_riesgo_predicho}</td>
+            <td style="padding: 6px 8px; font-size: 9px; text-align: center; font-weight: bold;">${ev.probabilidad_predicha}%</td>
+            <td style="padding: 6px 8px; font-size: 9px; text-align: center;">${ev.valor_hemoglobina_glucosilada}%</td>
+            <td style="padding: 6px 8px; font-size: 9px; text-align: center;">${ev.valor_colesterol_ldl}</td>
+            <td style="padding: 6px 8px; font-size: 9px; text-align: center;">${ev.tension_arterial}</td>
+            <td style="padding: 6px 8px; font-size: 9px; text-align: center;">${ev.masa_corporal}</td>
+            <td style="padding: 6px 8px; font-size: 9px; text-align: center;">${ev.resultado_glucosa}</td>
+            <td style="padding: 6px 8px; font-size: 9px; text-align: center; font-weight: 600; color: #475569;">${ev.resultado_real || 'Sin Confirmar'}</td>
+          </tr>
+        `;
       });
-      const riskClass = ev.nivel_riesgo_predicho === 'Alto' ? '#ef4444' : ev.nivel_riesgo_predicho === 'Medio' ? '#eab308' : '#10b981';
-      tableRows += `
-        <tr>
-          <td style="font-weight: bold;">${dateStr}</td>
-          <td style="text-align: center; font-weight: bold; color: ${riskClass};">${ev.nivel_riesgo_predicho}</td>
-          <td style="text-align: center; font-weight: bold;">${ev.probabilidad_predicha}%</td>
-          <td style="text-align: center;">${ev.valor_hemoglobina_glucosilada}%</td>
-          <td style="text-align: center;">${ev.valor_colesterol_ldl}</td>
-          <td style="text-align: center;">${ev.tension_arterial}</td>
-          <td style="text-align: center;">${ev.masa_corporal}</td>
-          <td style="text-align: center;">${ev.resultado_glucosa}</td>
-          <td style="text-align: center; font-weight: 600; color: #475569;">${ev.resultado_real || 'Sin Confirmar'}</td>
-        </tr>
+
+      const container = document.createElement('div');
+      container.innerHTML = `
+        <div style="font-family: Arial, sans-serif; color: #334155; padding: 25px; font-size: 11px; line-height: 1.45;">
+          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0f172a; padding-bottom: 15px; margin-bottom: 20px;">
+            <div>
+              <h1 style="margin: 0; font-size: 20px; font-weight: 800; color: #0f172a;">CardioPredict CDSS</h1>
+              <p style="margin: 2px 0 0 0; font-size: 8px; color: #64748b; font-weight: 600; text-transform: uppercase;">Expediente de Evolución Histórica de Riesgo Cardiovascular</p>
+            </div>
+            <div style="text-align: right; font-size: 8px; color: #64748b;">
+              <p><strong>Expediente Clínico Consolidado</strong></p>
+              <p>Fecha de Impresión: ${new Date().toLocaleDateString('es-MX')}</p>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px 20px; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; margin-bottom: 20px;">
+            <div style="display: flex; flex-direction: column;">
+              <span style="font-size: 8px; font-weight: 700; color: #94a3b8; text-transform: uppercase; margin-bottom: 2px;">Paciente</span>
+              <span style="font-size: 11px; font-weight: bold; color: #1e293b;">${patient.first_name} ${patient.last_name}</span>
+            </div>
+            <div style="display: flex; flex-direction: column;">
+              <span style="font-size: 8px; font-weight: 700; color: #94a3b8; text-transform: uppercase; margin-bottom: 2px;">CURP</span>
+              <span style="font-size: 11px; font-weight: bold; color: #1e293b; font-family: monospace;">${patient.curp || 'No Registrado'}</span>
+            </div>
+            <div style="display: flex; flex-direction: column;">
+              <span style="font-size: 8px; font-weight: 700; color: #94a3b8; text-transform: uppercase; margin-bottom: 2px;">Fecha de Nacimiento</span>
+              <span style="font-size: 11px; font-weight: bold; color: #1e293b;">${patient.fecha_nacimiento} (${edad} años)</span>
+            </div>
+            <div style="display: flex; flex-direction: column;">
+              <span style="font-size: 8px; font-weight: 700; color: #94a3b8; text-transform: uppercase; margin-bottom: 2px;">Médico Tratante</span>
+              <span style="font-size: 11px; font-weight: bold; color: #1e293b;">${docEmail}</span>
+            </div>
+          </div>
+
+          <div style="font-size: 10px; font-weight: 700; color: #0f172a; text-transform: uppercase; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; margin: 20px 0 10px 0;">Evolución de Evaluaciones Registradas (${evaluations.length})</div>
+          <table style="width: 100%; border-collapse: collapse; margin-top: 10px; border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden;">
+            <thead>
+              <tr style="background-color: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+                <th style="font-size: 8px; font-weight: 700; color: #475569; text-transform: uppercase; padding: 6px 8px; text-align: left;">Fecha</th>
+                <th style="font-size: 8px; font-weight: 700; color: #475569; text-transform: uppercase; padding: 6px 8px; text-align: center;">Riesgo Predicho</th>
+                <th style="font-size: 8px; font-weight: 700; color: #475569; text-transform: uppercase; padding: 6px 8px; text-align: center;">Certeza</th>
+                <th style="font-size: 8px; font-weight: 700; color: #475569; text-transform: uppercase; padding: 6px 8px; text-align: center;">HbA1c</th>
+                <th style="font-size: 8px; font-weight: 700; color: #475569; text-transform: uppercase; padding: 6px 8px; text-align: center;">LDL (mg/dL)</th>
+                <th style="font-size: 8px; font-weight: 700; color: #475569; text-transform: uppercase; padding: 6px 8px; text-align: center;">Presión Sist.</th>
+                <th style="font-size: 8px; font-weight: 700; color: #475569; text-transform: uppercase; padding: 6px 8px; text-align: center;">IMC</th>
+                <th style="font-size: 8px; font-weight: 700; color: #475569; text-transform: uppercase; padding: 6px 8px; text-align: center;">Glucosa</th>
+                <th style="font-size: 8px; font-weight: 700; color: #475569; text-transform: uppercase; padding: 6px 8px; text-align: center;">Resultado Real</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${tableRows}
+            </tbody>
+          </table>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 30px;">
+            <div>
+              <div style="font-size: 8px; font-weight: 700; color: #94a3b8; text-transform: uppercase; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; margin-bottom: 10px;">Diagnóstico Clínico General e Indicaciones</div>
+              <div style="height: 12px; border-bottom: 1px dashed #cbd5e1;"></div>
+              <div style="height: 12px; border-bottom: 1px dashed #cbd5e1;"></div>
+            </div>
+            <div style="border-top: 1px solid #94a3b8; margin-top: 45px; padding-top: 6px; text-align: center;">
+              <p style="font-size: 10px; font-weight: bold; margin: 0;">Dr(a). ${docEmail}</p>
+              <p style="font-size: 8px; color: #64748b; margin: 4px 0 0 0;">Cédula Profesional / Firma Autorizada</p>
+            </div>
+          </div>
+        </div>
       `;
-    });
 
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Expediente Histórico - ${patient.first_name} ${patient.last_name}</title>
-        <meta charset="utf-8" />
-        <style>
-          body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #334155; margin: 0; padding: 40px; font-size: 12px; line-height: 1.5; }
-          .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0f172a; padding-bottom: 20px; margin-bottom: 30px; }
-          .header h1 { margin: 0; font-size: 24px; font-weight: 800; color: #0f172a; }
-          .header p { margin: 4px 0 0 0; font-size: 10px; color: #64748b; font-weight: 600; text-transform: uppercase; }
-          .meta-info { text-align: right; font-size: 10px; color: #64748b; }
-          .meta-info p { margin: 2px 0; }
-          .section-title { font-size: 11px; font-weight: 700; color: #0f172a; text-transform: uppercase; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; margin: 25px 0 15px 0; letter-spacing: 0.5px; }
-          .patient-card { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 25px; }
-          .patient-card div { display: flex; flex-direction: column; }
-          .patient-card span.label { font-size: 9px; font-weight: 700; color: #94a3b8; text-transform: uppercase; margin-bottom: 4px; }
-          .patient-card span.val { font-size: 13px; font-weight: bold; color: #1e293b; }
-          table { width: 100%; border-collapse: collapse; margin-top: 10px; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
-          th { background-color: #f8fafc; font-size: 9px; font-weight: 700; color: #475569; text-transform: uppercase; padding: 10px 12px; border-bottom: 1px solid #e2e8f0; text-align: left; }
-          td { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; font-size: 11px; }
-          .signature-section { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 50px; }
-          .signature-box { border-top: 1px solid #94a3b8; margin-top: 60px; padding-top: 10px; text-align: center; }
-          @media print {
-            body { padding: 0; }
-          }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <div>
-            <h1>CardioPredict CDSS</h1>
-            <p>Expediente de Evolución Histórica de Riesgo Cardiovascular</p>
-          </div>
-          <div class="meta-info">
-            <p><strong>Expediente Clínico Consolidado</strong></p>
-            <p>Fecha de Impresión: ${new Date().toLocaleDateString('es-MX')}</p>
-          </div>
-        </div>
-
-        <div class="patient-card">
-          <div>
-            <span class="label">Paciente</span>
-            <span class="val">${patient.first_name} ${patient.last_name}</span>
-          </div>
-          <div>
-            <span class="label">CURP</span>
-            <span class="val" style="font-family: monospace;">${patient.curp || 'No Registrado'}</span>
-          </div>
-          <div>
-            <span class="label">Fecha de Nacimiento</span>
-            <span class="val">${patient.fecha_nacimiento} (${edad} años)</span>
-          </div>
-          <div>
-            <span class="label">Médico Tratante</span>
-            <span class="val">${docEmail}</span>
-          </div>
-        </div>
-
-        <div class="section-title">Evolución de Evaluaciones Registradas (${evaluations.length})</div>
-        <table>
-          <thead>
-            <tr>
-              <th>Fecha</th>
-              <th style="text-align: center;">Riesgo Predicho</th>
-              <th style="text-align: center;">Certeza</th>
-              <th style="text-align: center;">HbA1c</th>
-              <th style="text-align: center;">LDL (mg/dL)</th>
-              <th style="text-align: center;">Presión Sist.</th>
-              <th style="text-align: center;">IMC</th>
-              <th style="text-align: center;">Glucosa</th>
-              <th style="text-align: center;">Resultado Real</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${tableRows}
-          </tbody>
-        </table>
-
-        <div class="signature-section">
-          <div>
-            <div style="font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; margin-bottom: 10px;">Diagnóstico Clínico General e Indicaciones</div>
-            <div style="height: 15px; border-bottom: 1px dashed #cbd5e1;"></div>
-            <div style="height: 15px; border-bottom: 1px dashed #cbd5e1;"></div>
-          </div>
-          <div class="signature-box">
-            <p style="font-size: 11px; font-weight: bold; margin: 0;">Dr(a). ${docEmail}</p>
-            <p style="font-size: 9px; color: #64748b; margin: 4px 0 0 0;">Cédula Profesional / Firma Autorizada</p>
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
-
-    printWindow.document.write(htmlContent);
-    printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => {
-      printWindow.onafterprint = () => {
-        try {
-          printWindow.close();
-        } catch (e) {
-          console.error("Error al cerrar la ventana de impresión:", e);
-        }
+      const opt = {
+        margin: [10, 10, 10, 10],
+        filename: `Expediente_Evolucion_${patient.first_name}_${patient.last_name}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, logging: false },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
       };
-      printWindow.print();
-    }, 250);
+
+      const pdfBlob = await html2pdf().from(container).set(opt).outputPdf('blob');
+      const url = URL.createObjectURL(pdfBlob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `Expediente_Evolucion_${patient.first_name}_${patient.last_name}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      console.error("Fallo al descargar PDF:", err.message);
+      alert("Error al generar el PDF. Por favor reintenta.");
+    } finally {
+      setIsDownloading(false);
+    }
   };
+
+  // Pre-cargar html2pdf.js al montar la página para evitar retraso asíncrono y bloqueos de navegador
+  useEffect(() => {
+    if (typeof window !== 'undefined' && !(window as any).html2pdf) {
+      const script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+      script.async = true;
+      document.head.appendChild(script);
+    }
+  }, []);
 
   // Cerrar el menú de reportes PDF al hacer click fuera
   useEffect(() => {
@@ -1001,6 +983,16 @@ export default function PacienteDetallePage() {
         </section>
 
       </main>
+
+      {isDownloading && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50">
+          <div className="bg-white p-5 rounded-2xl shadow-xl flex flex-col items-center gap-3 border border-slate-100 max-w-xs text-center font-sans">
+            <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+            <p className="text-xs font-bold text-slate-700">Generando Reporte PDF...</p>
+            <p className="text-[10px] text-slate-400">Compilando biomarcadores clínicos e inferencias.</p>
+          </div>
+        </div>
+      )}
 
     </div>
   );
