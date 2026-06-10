@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { 
   ArrowLeft, Calendar, User, TrendingUp, Plus, FileSpreadsheet, 
   Sparkles, ChevronDown, ChevronUp, CheckCircle, AlertCircle, 
-  ShieldCheck, Heart, Info, ClipboardList 
+  ShieldCheck, Heart, Info, ClipboardList, FileText
 } from 'lucide-react';
 import { Patient, Evaluation } from '@/types';
 import { 
@@ -35,6 +35,31 @@ export default function PacienteDetallePage() {
   const [selectedBiomarker, setSelectedBiomarker] = useState<string>("valor_hemoglobina_glucosilada");
   const [expandedEvalId, setExpandedEvalId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'riesgo' | 'biomarcadores'>('riesgo');
+  const [printMode, setPrintMode] = useState<'single' | 'history' | null>(null);
+
+  const handlePrintActiveEvaluation = () => {
+    setPrintMode('single');
+    const afterPrint = () => {
+      setPrintMode(null);
+      window.removeEventListener('afterprint', afterPrint);
+    };
+    window.addEventListener('afterprint', afterPrint);
+    setTimeout(() => {
+      window.print();
+    }, 250);
+  };
+
+  const handlePrintHistory = () => {
+    setPrintMode('history');
+    const afterPrint = () => {
+      setPrintMode(null);
+      window.removeEventListener('afterprint', afterPrint);
+    };
+    window.addEventListener('afterprint', afterPrint);
+    setTimeout(() => {
+      window.print();
+    }, 250);
+  };
 
   useEffect(() => {
     // Validar sesión
@@ -299,7 +324,7 @@ export default function PacienteDetallePage() {
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
       
       {/* Cabecera del Expediente */}
-      <header className="bg-white border-b border-slate-100 py-4 px-6 md:px-12 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-sm z-10 sticky top-0 glass-panel">
+      <header className="bg-white border-b border-slate-100 py-4 px-6 md:px-12 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-sm z-10 sticky top-0 glass-panel print:hidden">
         <div className="flex items-center gap-4">
           <button 
             onClick={() => router.push('/dashboard')}
@@ -329,15 +354,41 @@ export default function PacienteDetallePage() {
           <button 
             onClick={handleExportPatientCSV}
             disabled={evaluations.length === 0}
-            className="flex-1 md:flex-none px-4 py-2 border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-xs font-bold text-slate-600 flex items-center justify-center gap-1.5 transition cursor-pointer"
+            className="flex-1 md:flex-none px-4 py-2 border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-xs font-bold text-slate-600 flex items-center justify-center gap-1.5 transition cursor-pointer print:hidden"
           >
             <FileSpreadsheet className="w-3.5 h-3.5" />
             Exportar Historial (CSV)
           </button>
 
+          {/* Menú de Reportes PDF */}
+          <div className="relative group flex-1 md:flex-none print:hidden">
+            <button
+              disabled={evaluations.length === 0}
+              className="w-full md:w-auto px-4 py-2 border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-xs font-bold text-slate-700 flex items-center justify-center gap-1.5 transition cursor-pointer"
+            >
+              <FileText className="w-3.5 h-3.5 text-rose-500" />
+              Reportes PDF
+              <ChevronDown className="w-3 h-3 text-slate-400" />
+            </button>
+            <div className="absolute right-0 top-full mt-1.5 w-56 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1.5 hidden group-hover:block transition font-sans">
+              <button
+                onClick={handlePrintActiveEvaluation}
+                className="w-full text-left px-4 py-2 hover:bg-slate-50 text-xs font-semibold text-slate-700 flex items-center gap-2 cursor-pointer"
+              >
+                📄 Imprimir Evaluación Actual
+              </button>
+              <button
+                onClick={handlePrintHistory}
+                className="w-full text-left px-4 py-2 hover:bg-slate-50 text-xs font-semibold text-slate-700 flex items-center gap-2 cursor-pointer"
+              >
+                📊 Imprimir Evolución Completa
+              </button>
+            </div>
+          </div>
+
           <button 
             onClick={() => router.push(`/evaluacion?patientId=${patient.id}`)}
-            className="flex-1 md:flex-none px-4 py-2 bg-slate-900 hover:bg-slate-800 rounded-lg text-xs font-bold text-white flex items-center justify-center gap-1.5 transition cursor-pointer shadow-md"
+            className="flex-1 md:flex-none px-4 py-2 bg-slate-900 hover:bg-slate-800 rounded-lg text-xs font-bold text-white flex items-center justify-center gap-1.5 transition cursor-pointer shadow-md print:hidden"
           >
             <Plus className="w-3.5 h-3.5" />
             Nueva Evaluación
@@ -346,7 +397,7 @@ export default function PacienteDetallePage() {
       </header>
 
       {/* Grid Principal */}
-      <main className="flex-1 max-w-[1400px] w-full mx-auto p-4 md:p-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
+      <main className="flex-1 max-w-[1400px] w-full mx-auto p-4 md:p-8 grid grid-cols-1 lg:grid-cols-12 gap-8 print:hidden">
         
         {/* Columna Izquierda: Visualización de Evolución (8 columnas) */}
         <section className="lg:col-span-8 space-y-6">
@@ -487,7 +538,7 @@ export default function PacienteDetallePage() {
                         <div className="space-y-1">
                           <span className="text-xs font-bold text-slate-800 block">{evalDate}</span>
                           <span className="text-[10px] text-slate-400 font-medium block">
-                            Inferencia: {ev.probabilidad_predicha}%
+                            Inferencia (Certeza: {ev.probabilidad_predicha}%)
                           </span>
                         </div>
 
@@ -565,6 +616,323 @@ export default function PacienteDetallePage() {
         </section>
 
       </main>
+
+      {/* ========================================================================= */}
+      {/* VISTA DE IMPRESIÓN: REPORTE CLÍNICO INDIVIDUAL (PDF) */}
+      {/* ========================================================================= */}
+      {printMode === 'single' && (
+        (() => {
+          const activeEval = evaluations.find(e => e.id === expandedEvalId) || evaluations[evaluations.length - 1];
+          if (!activeEval) return null;
+          return (
+            <div className="hidden print:block w-full max-w-4xl mx-auto p-8 bg-white text-slate-800 font-sans text-xs space-y-6">
+              {/* Cabecera / Membrete */}
+              <div className="flex justify-between items-center border-b-2 border-slate-900 pb-4">
+                <div>
+                  <h1 className="text-xl font-bold uppercase tracking-wider text-slate-900">CardioPredict CDSS</h1>
+                  <p className="text-slate-500 font-semibold text-[10px] uppercase">Sistema de Soporte de Decisiones Clínicas - Riesgo Cardiovascular</p>
+                </div>
+                <div className="text-right text-[10px] text-slate-500 font-semibold">
+                  <p>Reporte Clínico de Inferencia</p>
+                  <p>Fecha de Impresión: {new Date().toLocaleDateString('es-MX')}</p>
+                </div>
+              </div>
+
+              {/* Datos Demográficos del Paciente */}
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase">Paciente</p>
+                  <p className="text-sm font-bold text-slate-850">{patient.first_name} {patient.last_name}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase">CURP</p>
+                  <p className="text-xs font-mono font-bold text-slate-700">{patient.curp || 'No Registrado'}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase">Fecha de Nacimiento</p>
+                  <p className="text-xs font-semibold text-slate-700">{patient.fecha_nacimiento} ({edadPaciente} años)</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase">Fecha de Evaluación</p>
+                  <p className="text-xs font-semibold text-slate-700">
+                    {new Date(activeEval.fecha_evaluacion).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                </div>
+              </div>
+
+              {/* Resultado de la Clasificación de Riesgo */}
+              <div className="p-4 rounded-xl border flex items-center justify-between gap-6 bg-slate-50/50">
+                <div className="space-y-1">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase">Riesgo Cardiovascular CDSS</p>
+                  <div className="flex items-center gap-2">
+                    {activeEval.nivel_riesgo_predicho === 'Alto' ? (
+                      <span className="text-sm font-extrabold text-rose-700">🔴 RIESGO CARDIOVASCULAR ALTO</span>
+                    ) : activeEval.nivel_riesgo_predicho === 'Medio' ? (
+                      <span className="text-sm font-extrabold text-amber-700">🟡 RIESGO CARDIOVASCULAR MEDIO</span>
+                    ) : (
+                      <span className="text-sm font-extrabold text-emerald-700">🟢 RIESGO CARDIOVASCULAR BAJO</span>
+                    )}
+                  </div>
+                </div>
+                <div className="text-right space-y-1">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase">Certeza de Clasificación</p>
+                  <p className="text-lg font-extrabold text-slate-900">{activeEval.probabilidad_predicha}% <span className="text-xs font-normal text-slate-500">(Confianza XGBoost)</span></p>
+                </div>
+              </div>
+
+              {/* Tabla de Biomarcadores y Mediciones */}
+              <div className="space-y-2">
+                <h3 className="text-xs font-bold text-slate-850 border-b border-slate-200 pb-1 uppercase tracking-wide">Ficha de Biomarcadores e Indicadores</h3>
+                <table className="w-full text-left border-collapse border border-slate-200">
+                  <thead>
+                    <tr className="bg-slate-50 text-[9px] font-bold text-slate-600 uppercase border-b border-slate-200">
+                      <th className="p-2 border-r border-slate-200">Biomarcador / Indicador</th>
+                      <th className="p-2 border-r border-slate-200 text-center">Valor Obtenido</th>
+                      <th className="p-2 border-r border-slate-200 text-center">Rango Objetivo / Referencia</th>
+                      <th className="p-2 text-center">Evaluación Clínica</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-[10px] divide-y divide-slate-150">
+                    <tr>
+                      <td className="p-2 border-r border-slate-200 font-semibold">Hemoglobina Glucosilada (HbA1c)</td>
+                      <td className="p-2 border-r border-slate-200 text-center font-bold">{activeEval.valor_hemoglobina_glucosilada}%</td>
+                      <td className="p-2 border-r border-slate-200 text-center text-slate-500">{"< 5.7% (Normal)"}</td>
+                      <td className="p-2 text-center">
+                        {activeEval.valor_hemoglobina_glucosilada >= 5.7 ? (
+                          <span className="text-rose-600 font-bold">⚠️ Alterado (Pre/Diabetes)</span>
+                        ) : (
+                          <span className="text-emerald-600 font-bold">✓ Normal</span>
+                        )}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="p-2 border-r border-slate-200 font-semibold">Colesterol LDL</td>
+                      <td className="p-2 border-r border-slate-200 text-center font-bold">{activeEval.valor_colesterol_ldl} mg/dL</td>
+                      <td className="p-2 border-r border-slate-200 text-center text-slate-500">{"< 100 mg/dL (Normal)"}</td>
+                      <td className="p-2 text-center">
+                        {activeEval.valor_colesterol_ldl >= 100 ? (
+                          <span className="text-rose-600 font-bold">⚠️ Elevado</span>
+                        ) : (
+                          <span className="text-emerald-600 font-bold">✓ Normal</span>
+                        )}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="p-2 border-r border-slate-200 font-semibold">Presión Arterial Sistólica</td>
+                      <td className="p-2 border-r border-slate-200 text-center font-bold">{activeEval.tension_arterial} mmHg</td>
+                      <td className="p-2 border-r border-slate-200 text-center text-slate-500">{"< 120 mmHg (Normal)"}</td>
+                      <td className="p-2 text-center">
+                        {activeEval.tension_arterial >= 130 ? (
+                          <span className="text-rose-600 font-bold">⚠️ Hipertensión</span>
+                        ) : activeEval.tension_arterial >= 120 ? (
+                          <span className="text-amber-600 font-bold">⚠️ Elevada</span>
+                        ) : (
+                          <span className="text-emerald-600 font-bold">✓ Normal</span>
+                        )}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="p-2 border-r border-slate-200 font-semibold">Índice de Masa Corporal (IMC)</td>
+                      <td className="p-2 border-r border-slate-200 text-center font-bold">{activeEval.masa_corporal} kg/m²</td>
+                      <td className="p-2 border-r border-slate-200 text-center text-slate-500">18.5 - 24.9 (Normal)</td>
+                      <td className="p-2 text-center">
+                        {activeEval.masa_corporal >= 30 ? (
+                          <span className="text-rose-600 font-bold">⚠️ Obesidad</span>
+                        ) : activeEval.masa_corporal >= 25 ? (
+                          <span className="text-amber-600 font-bold">⚠️ Sobrepeso</span>
+                        ) : (
+                          <span className="text-emerald-600 font-bold">✓ Normal</span>
+                        )}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="p-2 border-r border-slate-200 font-semibold">Proteína C Reactiva (PCR-hs)</td>
+                      <td className="p-2 border-r border-slate-200 text-center font-bold">{activeEval.valor_proteinac_reactiva} mg/L</td>
+                      <td className="p-2 border-r border-slate-200 text-center text-slate-500">{"< 1.0 mg/L (Bajo Riesgo)"}</td>
+                      <td className="p-2 text-center">
+                        {activeEval.valor_proteinac_reactiva >= 3.0 ? (
+                          <span className="text-rose-600 font-bold">⚠️ Alto Riesgo Inflamatorio</span>
+                        ) : activeEval.valor_proteinac_reactiva >= 1.0 ? (
+                          <span className="text-amber-600 font-bold">⚠️ Riesgo Moderado</span>
+                        ) : (
+                          <span className="text-emerald-600 font-bold">✓ Normal</span>
+                        )}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="p-2 border-r border-slate-200 font-semibold">Glucosa en Ayunas</td>
+                      <td className="p-2 border-r border-slate-200 text-center font-bold">{activeEval.resultado_glucosa} mg/dL</td>
+                      <td className="p-2 border-r border-slate-200 text-center text-slate-500">{"70 - 99 mg/dL (Normal)"}</td>
+                      <td className="p-2 text-center">
+                        {activeEval.resultado_glucosa >= 126 ? (
+                          <span className="text-rose-600 font-bold">⚠️ Hiperglucemia Crítica</span>
+                        ) : activeEval.resultado_glucosa >= 100 ? (
+                          <span className="text-amber-600 font-bold">⚠️ Prediabetes</span>
+                        ) : (
+                          <span className="text-emerald-600 font-bold">✓ Normal</span>
+                        )}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="p-2 border-r border-slate-200 font-semibold">Colesterol Total</td>
+                      <td className="p-2 border-r border-slate-200 text-center font-bold">{activeEval.valor_colesterol_total} mg/dL</td>
+                      <td className="p-2 border-r border-slate-200 text-center text-slate-500">{"< 200 mg/dL (Normal)"}</td>
+                      <td className="p-2 text-center">
+                        {activeEval.valor_colesterol_total >= 200 ? (
+                          <span className="text-rose-600 font-bold">⚠️ Hipercolesterolemia</span>
+                        ) : (
+                          <span className="text-emerald-600 font-bold">✓ Normal</span>
+                        )}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="p-2 border-r border-slate-200 font-semibold">Cintura / Abdominal</td>
+                      <td className="p-2 border-r border-slate-200 text-center font-bold">{activeEval.medida_cintura} cm</td>
+                      <td className="p-2 border-r border-slate-200 text-center text-slate-500">Hombre &lt; 90 cm | Mujer &lt; 80 cm</td>
+                      <td className="p-2 text-center">
+                        {(activeEval.sexo === 'Hombre' && activeEval.medida_cintura >= 90) || (activeEval.sexo === 'Mujer' && activeEval.medida_cintura >= 80) ? (
+                          <span className="text-rose-600 font-bold">⚠️ Riesgo Abdominal</span>
+                        ) : (
+                          <span className="text-emerald-600 font-bold">✓ Normal</span>
+                        )}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Explicación SHAP Narrativa */}
+              <div className="space-y-2">
+                <h3 className="text-xs font-bold text-slate-850 border-b border-slate-200 pb-1 uppercase tracking-wide">Explicación Clínica y Aporte SHAP</h3>
+                <p className="text-slate-700 bg-slate-50 p-3.5 rounded-lg border border-slate-200 leading-relaxed font-mono text-[9.5px]">
+                  {activeEval.explicacion_shap}
+                </p>
+              </div>
+
+              {/* Notas Médicas y Firmas */}
+              <div className="grid grid-cols-2 gap-8 pt-8">
+                <div className="space-y-4">
+                  <h4 className="text-[10px] font-bold text-slate-400 uppercase border-b border-slate-100 pb-1">Observaciones y Tratamiento del Médico</h4>
+                  <div className="h-20 border-b border-dashed border-slate-350" />
+                  <div className="h-20 border-b border-dashed border-slate-350" />
+                </div>
+
+                <div className="flex flex-col justify-end items-center text-center space-y-2">
+                  <div className="w-48 border-b border-slate-400 pt-16" />
+                  <p className="text-[10px] font-bold text-slate-800">Dr(a). {localStorage.getItem('cdss_doctor_email') || 'Médico Tratante'}</p>
+                  <p className="text-[9px] text-slate-400">CardioPredict CDSS • Firma Autorizada</p>
+                </div>
+              </div>
+
+              <div className="pt-8 text-center text-[9px] text-slate-400 border-t border-slate-100 leading-normal">
+                Este reporte fue emitido por el sistema CardioPredict CDSS apoyado por modelos de inteligencia artificial (XGBoost). La predicción no reemplaza el juicio clínico final del especialista de la salud.
+              </div>
+            </div>
+          );
+        })()
+      )}
+
+      {/* ========================================================================= */}
+      {/* VISTA DE IMPRESIÓN: EXPEDIENTE DE EVOLUCIÓN HISTÓRICA (PDF) */}
+      {/* ========================================================================= */}
+      {printMode === 'history' && (
+        <div className="hidden print:block w-full max-w-4xl mx-auto p-8 bg-white text-slate-800 font-sans text-xs space-y-6">
+          {/* Cabecera / Membrete */}
+          <div className="flex justify-between items-center border-b-2 border-slate-900 pb-4">
+            <div>
+              <h1 className="text-xl font-bold uppercase tracking-wider text-slate-900">CardioPredict CDSS</h1>
+              <p className="text-slate-500 font-semibold text-[10px] uppercase">Expediente de Evolución Histórica de Riesgo Cardiovascular</p>
+            </div>
+            <div className="text-right text-[10px] text-slate-500 font-semibold">
+              <p>Expediente Clínico Consolidado</p>
+              <p>Fecha de Impresión: {new Date().toLocaleDateString('es-MX')}</p>
+            </div>
+          </div>
+
+          {/* Datos Demográficos */}
+          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-[10px] font-bold text-slate-400 uppercase">Paciente</p>
+              <p className="text-sm font-bold text-slate-855">{patient.first_name} {patient.last_name}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-bold text-slate-400 uppercase">CURP</p>
+              <p className="text-xs font-mono font-bold text-slate-700">{patient.curp || 'No Registrado'}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-bold text-slate-400 uppercase">Fecha de Nacimiento</p>
+              <p className="text-xs font-semibold text-slate-700">{patient.fecha_nacimiento} ({edadPaciente} años)</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-bold text-slate-400 uppercase">Médico Tratante</p>
+              <p className="text-xs font-semibold text-slate-700">{localStorage.getItem('cdss_doctor_email') || 'Médico Adscrito'}</p>
+            </div>
+          </div>
+
+          {/* Resumen Histórico */}
+          <div className="space-y-4">
+            <h3 className="text-xs font-bold text-slate-855 border-b border-slate-200 pb-1 uppercase tracking-wide">Evolución de Evaluaciones Registradas ({evaluations.length})</h3>
+            
+            <table className="w-full text-left border-collapse border border-slate-200">
+              <thead>
+                <tr className="bg-slate-50 text-[9px] font-bold text-slate-600 uppercase border-b border-slate-200">
+                  <th className="p-2 border-r border-slate-200">Fecha</th>
+                  <th className="p-2 border-r border-slate-200 text-center">Riesgo Predicho</th>
+                  <th className="p-2 border-r border-slate-200 text-center">Certeza</th>
+                  <th className="p-2 border-r border-slate-200 text-center">HbA1c</th>
+                  <th className="p-2 border-r border-slate-200 text-center">LDL (mg/dL)</th>
+                  <th className="p-2 border-r border-slate-200 text-center">Presión Sist.</th>
+                  <th className="p-2 border-r border-slate-200 text-center">IMC</th>
+                  <th className="p-2 border-r border-slate-200 text-center">Glucosa</th>
+                  <th className="p-2 text-center">Resultado Real</th>
+                </tr>
+              </thead>
+              <tbody className="text-[10px] divide-y divide-slate-150">
+                {evaluations.map((ev) => (
+                  <tr key={ev.id}>
+                    <td className="p-2 border-r border-slate-200 font-semibold">
+                      {new Date(ev.fecha_evaluacion).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    </td>
+                    <td className="p-2 border-r border-slate-200 text-center">
+                      {ev.nivel_riesgo_predicho === 'Alto' ? (
+                        <span className="text-rose-600 font-bold">🔴 Alto</span>
+                      ) : ev.nivel_riesgo_predicho === 'Medio' ? (
+                        <span className="text-amber-600 font-bold">🟡 Medio</span>
+                      ) : (
+                        <span className="text-emerald-600 font-bold">🟢 Bajo</span>
+                      )}
+                    </td>
+                    <td className="p-2 border-r border-slate-200 text-center font-bold">{ev.probabilidad_predicha}%</td>
+                    <td className="p-2 border-r border-slate-200 text-center">{ev.valor_hemoglobina_glucosilada}%</td>
+                    <td className="p-2 border-r border-slate-200 text-center">{ev.valor_colesterol_ldl}</td>
+                    <td className="p-2 border-r border-slate-200 text-center">{ev.tension_arterial}</td>
+                    <td className="p-2 border-r border-slate-200 text-center">{ev.masa_corporal}</td>
+                    <td className="p-2 border-r border-slate-200 text-center">{ev.resultado_glucosa}</td>
+                    <td className="p-2 text-center font-semibold text-slate-600">
+                      {ev.resultado_real ? `${ev.resultado_real} Confirmado` : 'Sin Confirmar'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Notas Médicas y Firmas */}
+          <div className="grid grid-cols-2 gap-8 pt-8">
+            <div className="space-y-4">
+              <h4 className="text-[10px] font-bold text-slate-400 uppercase border-b border-slate-100 pb-1">Diagnóstico Clínico General e Indicaciones</h4>
+              <div className="h-20 border-b border-dashed border-slate-355" />
+              <div className="h-20 border-b border-dashed border-slate-355" />
+            </div>
+
+            <div className="flex flex-col justify-end items-center text-center space-y-2">
+              <div className="w-48 border-b border-slate-400 pt-16" />
+              <p className="text-[10px] font-bold text-slate-800">Dr(a). {localStorage.getItem('cdss_doctor_email') || 'Médico Tratante'}</p>
+              <p className="text-[9px] text-slate-400">CardioPredict CDSS • Firma Autorizada</p>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS public.patients (
     last_name VARCHAR(100) NOT NULL,
     curp VARCHAR(18) UNIQUE, -- Identificador único oficial en México (opcional)
     fecha_nacimiento DATE NOT NULL,
+    activo BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 

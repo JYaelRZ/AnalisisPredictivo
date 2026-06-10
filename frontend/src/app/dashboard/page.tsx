@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { 
   Heart, Users, ClipboardList, LogOut, Search, Plus, UserPlus, 
-  TrendingUp, Activity, ShieldAlert, Sparkles, ChevronRight 
+  TrendingUp, Activity, ShieldAlert, Sparkles, ChevronRight,
+  UserCheck, UserMinus, Trash2, HelpCircle, AlertTriangle
 } from 'lucide-react';
 import { Patient, Evaluation } from '@/types';
 
@@ -60,6 +61,9 @@ export default function DashboardPage() {
   const [evaluations, setEvaluations] = useState<Evaluation[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddPatient, setShowAddPatient] = useState(false);
+  
+  const [showSuspended, setShowSuspended] = useState(false);
+  const [confirmDeletePatient, setConfirmDeletePatient] = useState<Patient | null>(null);
   
   // Formulario nuevo paciente
   const [newFirstName, setNewFirstName] = useState('');
@@ -224,6 +228,7 @@ export default function DashboardPage() {
       last_name: newLastName,
       curp: newCurp.toUpperCase() || undefined,
       fecha_nacimiento: newDob,
+      activo: true,
       created_at: new Date().toISOString().split('T')[0]
     };
 
@@ -241,7 +246,8 @@ export default function DashboardPage() {
           first_name: newFirstName,
           last_name: newLastName,
           curp: newCurp.toUpperCase() || null,
-          fecha_nacimiento: newDob
+          fecha_nacimiento: newDob,
+          activo: true
         }]);
 
         if (error) {
@@ -260,6 +266,79 @@ export default function DashboardPage() {
     setNewCurp('');
     setNewDob('');
     setShowAddPatient(false);
+  };
+
+  // Cambiar el estado activo/suspendido de un paciente
+  const handleToggleActive = async (patient: Patient) => {
+    const nextActive = patient.activo === false ? true : false;
+    
+    // 1. Actualizar estado local y localStorage
+    const updatedPatients = patients.map(p => {
+      if (p.id === patient.id) {
+        return { ...p, activo: nextActive };
+      }
+      return p;
+    });
+    setPatients(updatedPatients);
+    localStorage.setItem('cdss_patients', JSON.stringify(updatedPatients));
+    
+    // 2. Persistir en Supabase
+    const isSimulated = localStorage.getItem('cdss_simulated_session') === 'true';
+    if (!isSimulated) {
+      try {
+        const { error } = await supabase
+          .from('patients')
+          .update({ activo: nextActive })
+          .eq('id', patient.id);
+        
+        if (error) {
+          console.error("Error al suspender/reactivar paciente en Supabase:", error.message);
+        }
+      } catch (err) {
+        console.error("Error de conexión con Supabase:", err);
+      }
+    }
+  };
+
+  // Confirmar y eliminar físicamente al paciente de Supabase
+  const handleDeletePatientConfirm = async () => {
+    if (!confirmDeletePatient) return;
+    const patientId = confirmDeletePatient.id;
+
+    // 1. Actualizar estado local y localStorage de pacientes
+    const updatedPatients = patients.filter(p => p.id !== patientId);
+    setPatients(updatedPatients);
+    localStorage.setItem('cdss_patients', JSON.stringify(updatedPatients));
+
+    // Borrar evaluaciones del paciente en localStorage
+    const savedEvaluations = localStorage.getItem('cdss_evaluations');
+    if (savedEvaluations) {
+      const parsed: Evaluation[] = JSON.parse(savedEvaluations);
+      const filteredEvaluations = parsed.filter(e => e.patient_id !== patientId);
+      setEvaluations(filteredEvaluations);
+      localStorage.setItem('cdss_evaluations', JSON.stringify(filteredEvaluations));
+    }
+
+    // 2. Borrar en Supabase
+    const isSimulated = localStorage.getItem('cdss_simulated_session') === 'true';
+    if (!isSimulated) {
+      try {
+        const { error } = await supabase
+          .from('patients')
+          .delete()
+          .eq('id', patientId);
+
+        if (error) {
+          console.error("Error al eliminar paciente de Supabase:", error.message);
+        } else {
+          console.log("Paciente eliminado con éxito de Supabase.");
+        }
+      } catch (err) {
+        console.error("Error de conexión con Supabase:", err);
+      }
+    }
+
+    setConfirmDeletePatient(null);
   };
 
   // Exportar todas las evaluaciones clínicas para entrenamiento continuo
@@ -301,6 +380,9 @@ export default function DashboardPage() {
 
   // Filtrar pacientes
   const filteredPatients = patients.filter(patient => {
+    // Ocultar pacientes inactivos/suspendidos si no está habilitado el toggle
+    if (!showSuspended && patient.activo === false) return false;
+
     const fullName = `${patient.first_name} ${patient.last_name}`.toLowerCase();
     const curp = (patient.curp || '').toLowerCase();
     return fullName.includes(searchQuery.toLowerCase()) || curp.includes(searchQuery.toLowerCase());
@@ -416,15 +498,27 @@ export default function DashboardPage() {
               <p className="text-slate-400 text-xs mt-0.5">Seleccione un paciente de la lista para gestionar sus antecedentes o iniciar una evaluación de riesgo.</p>
             </div>
             
-            <div className="relative w-full sm:max-w-[320px]">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-              <input
-                type="text"
-                placeholder="Buscar por nombre o CURP..."
-                className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 transition"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
+            <div className="flex flex-wrap items-center gap-4 w-full sm:w-auto">
+              <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-600 select-none">
+                <input
+                  type="checkbox"
+                  checked={showSuspended}
+                  onChange={(e) => setShowSuspended(e.target.checked)}
+                  className="rounded border-slate-300 text-slate-900 focus:ring-slate-900 w-4 h-4 cursor-pointer"
+                />
+                <span>Mostrar Suspendidos</span>
+              </label>
+
+              <div className="relative w-full sm:max-w-[280px]">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                <input
+                  type="text"
+                  placeholder="Buscar por nombre o CURP..."
+                  className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-600/20 focus:border-slate-800 transition"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
             </div>
           </div>
 
@@ -446,8 +540,17 @@ export default function DashboardPage() {
                     return (
                       <tr key={patient.id} className="hover:bg-slate-50/50 transition">
                         <td className="py-4.5 px-6">
-                          <span className="font-semibold text-slate-900 block">{patient.first_name} {patient.last_name}</span>
-                          <span className="text-xs text-slate-400 font-mono">{patient.curp || 'S/N CURP'}</span>
+                          <div className="flex items-center gap-2">
+                            <div>
+                              <span className="font-semibold text-slate-900 block">{patient.first_name} {patient.last_name}</span>
+                              <span className="text-xs text-slate-400 font-mono">{patient.curp || 'S/N CURP'}</span>
+                            </div>
+                            {patient.activo === false && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-100 uppercase tracking-wider scale-90">
+                                Suspendido
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="py-4.5 px-6 font-medium text-slate-600">
                           {patient.fecha_nacimiento}
@@ -460,19 +563,29 @@ export default function DashboardPage() {
                         </td>
                         <td className="py-4.5 px-6">
                           {latestEval ? (
-                            latestEval.nivel_riesgo_predicho === 'Alto' ? (
-                              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-rose-50 border border-rose-100 text-rose-700">
-                                🔴 Alto ({latestEval.probabilidad_predicha}%)
-                              </span>
-                            ) : latestEval.nivel_riesgo_predicho === 'Medio' ? (
-                              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-yellow-50 border border-yellow-100 text-yellow-800">
-                                🟡 Medio ({latestEval.probabilidad_predicha}%)
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 border border-emerald-100 text-emerald-700">
-                                🟢 Bajo ({latestEval.probabilidad_predicha}%)
-                              </span>
-                            )
+                            <div className="flex items-center gap-1.5">
+                              {latestEval.nivel_riesgo_predicho === 'Alto' ? (
+                                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-rose-50 border border-rose-100 text-rose-700">
+                                  🔴 Alto (Certeza: {latestEval.probabilidad_predicha}%)
+                                </span>
+                              ) : latestEval.nivel_riesgo_predicho === 'Medio' ? (
+                                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-yellow-50 border border-yellow-100 text-yellow-800">
+                                  🟡 Medio (Certeza: {latestEval.probabilidad_predicha}%)
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 border border-emerald-100 text-emerald-700">
+                                  🟢 Bajo (Certeza: {latestEval.probabilidad_predicha}%)
+                                </span>
+                              )}
+                              
+                              <div className="group relative cursor-help text-slate-400 hover:text-slate-650 transition">
+                                <HelpCircle className="w-3.5 h-3.5" />
+                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 hidden group-hover:block bg-slate-900 text-white text-[10px] p-2.5 rounded-lg shadow-xl z-50 text-center leading-normal font-sans font-medium">
+                                  Este porcentaje representa la confianza del modelo XGBoost en su clasificación, no la magnitud del riesgo en sí.
+                                  <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900" />
+                                </div>
+                              </div>
+                            </div>
                           ) : (
                             <span className="text-xs text-slate-400 italic">Sin evaluar</span>
                           )}
@@ -482,6 +595,7 @@ export default function DashboardPage() {
                             <button
                               onClick={() => router.push(`/paciente/${patient.id}`)}
                               className="inline-flex items-center gap-1 py-1.5 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition cursor-pointer border border-slate-200"
+                              title="Ver expediente e historial clínico"
                             >
                               <TrendingUp className="w-3.5 h-3.5 text-slate-500" />
                               Historial
@@ -489,10 +603,28 @@ export default function DashboardPage() {
                             
                             <button
                               onClick={() => router.push(`/evaluacion?patientId=${patient.id}`)}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold cursor-pointer transition shadow-sm"
+                              disabled={patient.activo === false}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded-lg text-xs font-semibold cursor-pointer transition shadow-sm"
+                              title={patient.activo === false ? "Active al paciente para evaluar" : "Iniciar soporte CDSS"}
                             >
                               Evaluar CDSS
                               <ChevronRight className="w-3 h-3" />
+                            </button>
+
+                            <button
+                              onClick={() => handleToggleActive(patient)}
+                              className={`p-1.5 rounded-lg border text-xs font-bold transition cursor-pointer ${patient.activo === false ? 'bg-emerald-50 hover:bg-emerald-100 border-emerald-250 text-emerald-700' : 'bg-amber-50 hover:bg-amber-100 border-amber-250 text-amber-700'}`}
+                              title={patient.activo === false ? "Reactivar expediente del paciente" : "Suspender expediente (preserva datos para IA)"}
+                            >
+                              {patient.activo === false ? <UserCheck className="w-3.5 h-3.5" /> : <UserMinus className="w-3.5 h-3.5" />}
+                            </button>
+
+                            <button
+                              onClick={() => setConfirmDeletePatient(patient)}
+                              className="p-1.5 bg-rose-50 hover:bg-rose-100 border border-rose-250 text-rose-600 rounded-lg text-xs font-bold transition cursor-pointer"
+                              title="Eliminar expediente permanentemente"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         </td>
@@ -588,6 +720,43 @@ export default function DashboardPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {confirmDeletePatient && (
+        <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-[440px] bg-white rounded-2xl border border-slate-100 shadow-2xl p-6 md:p-8 space-y-5">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="p-2 bg-rose-50 rounded-xl">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <h3 className="text-lg font-bold text-slate-900">¿Eliminar Expediente?</h3>
+            </div>
+            
+            <p className="text-slate-600 text-xs leading-relaxed">
+              Está a punto de eliminar de forma permanente el expediente de <strong>{confirmDeletePatient.first_name} {confirmDeletePatient.last_name}</strong> ({confirmDeletePatient.curp || 'Sin CURP'}) y todo su historial de evaluaciones clínicas. Esta acción no se puede deshacer.
+            </p>
+
+            <div className="p-3 bg-amber-50 border border-amber-100 text-amber-800 rounded-lg text-[10px] leading-relaxed">
+              ⚠️ <strong>Recomendación médica:</strong> Para preservar el historial clínico para el reentrenamiento continuo de los modelos de IA de CardioPredict, se sugiere <strong>Suspender</strong> en vez de eliminar permanentemente.
+            </div>
+
+            <div className="pt-3 flex justify-end gap-3 border-t border-slate-50 text-sm">
+              <button
+                type="button"
+                onClick={() => setConfirmDeletePatient(null)}
+                className="px-4 py-2 hover:bg-slate-100 rounded-lg font-semibold text-slate-500 cursor-pointer transition"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleDeletePatientConfirm}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-550 rounded-lg font-semibold text-white cursor-pointer transition shadow-md"
+              >
+                Eliminar Permanentemente
+              </button>
+            </div>
           </div>
         </div>
       )}

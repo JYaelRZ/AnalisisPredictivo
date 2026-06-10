@@ -13,6 +13,7 @@ export interface Patient {
   last_name: string;
   curp?: string;
   fecha_nacimiento: string;
+  activo?: boolean;
   created_at: string;
 }
 

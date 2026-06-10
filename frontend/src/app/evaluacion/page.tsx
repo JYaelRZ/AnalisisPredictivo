@@ -608,7 +608,10 @@ function EvaluacionContent() {
                   <span className="text-4xl font-extrabold text-slate-900 block">
                     {prediction.probabilidad_porcentual}%
                   </span>
-                  <span className="text-xs text-slate-400">Probabilidad del modelo XGBoost</span>
+                  <span className="text-xs text-slate-500 font-semibold block">Certeza de clasificación (Confianza XGBoost)</span>
+                  <span className="text-[10px] text-slate-400 max-w-[280px] mx-auto block leading-tight">
+                    *Indica la seguridad matemática de la predicción seleccionada, no el grado de severidad cardiovascular.
+                  </span>
                 </div>
 
                 <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl text-left text-xs font-medium text-slate-700 leading-relaxed">
